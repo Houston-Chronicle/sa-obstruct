@@ -1,0 +1,749 @@
+---
+title: "Master File"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+#for general coding
+library(janitor)
+#for cleaning
+library(lubridate)
+#for working with dates
+library(readxl)
+#for working with excel files
+library(fuzzyjoin)
+#for working with imperfect strings
+library(reshape2)
+```
+
+# Questions
+
+For the Taking Responsibility investigation, the San Antonio Express-News had several questions to answer:
+
+How many obstruction charges had occurred since 2009?
+How many of these obstruction charges also was associated with an incident where a person had a BAC above 0.15?
+How many of these obstruction charges were also associated with a crash?
+Our work also led to an important additional question:
+
+How many of any charge labeled "obstruction passageway" involved alcohol and how many did not?
+* This question is going to be the most important to answer -- we will need to figure it out first
+
+# Uploading, Checking, & Cleaning
+
+## Uploading the scraped csv files, charges
+
+These are files we scraped from the county clerk's office with information on all codes we pulled for
+
+```{r}
+#Misdemeanors
+dwi_mis_raw <- read_csv("Data/scraped/bexar-misds-DWI-20191001-20191130.csv") %>%
+  mutate(`OFFENSE-CODE` = as.character(`OFFENSE-CODE`)) %>%
+  mutate(`CASE-CAUSE-NBR` = as.character(`CASE-CAUSE-NBR`)) %>%
+  mutate(`ADDR-HOUSE-NBR` = as.character(`ADDR-HOUSE-NBR`)) %>%
+  mutate(`SENTENCE` = as.character(`SENTENCE`)) %>%
+  mutate(`SID` = as.character(`SID`)) %>%
+  mutate(class = "misdemeanor")
+
+#Felonies
+dwi_fel_raw <- read_csv("Data/scraped/bexar-felony-DWI-20191001-20191130.csv") %>%
+  mutate(`OFFENSE-CODE` = as.character(`OFFENSE-CODE`)) %>%
+  mutate(`CASE-CAUSE-NBR` = as.character(`CASE-CAUSE-NBR`)) %>%
+  mutate(`ADDR-HOUSE-NBR` = as.character(`ADDR-HOUSE-NBR`)) %>%
+  mutate(`SENTENCE` = as.character(`SENTENCE`)) %>%
+  mutate(`SID` = as.character(`SID`)) %>%
+  mutate(class = "felony")
+
+#Together
+dwi_raw <- dwi_mis_raw %>%
+  full_join(dwi_fel_raw)
+
+official_dwi_codes <- read_excel("Data/references_to_import/DWI-related offense codes from excel.xlsx", sheet = 1) %>%
+  clean_names() %>%
+  mutate(county_offense_code = as.character(county_offense_code))
+```
+
+Quick look at what we have
+
+```{r}
+dwi_raw_codes <- dwi_raw %>%
+  group_by(`OFFENSE-CODE`) %>%
+  tally() %>%
+  arrange(`OFFENSE-CODE`)
+
+dwi_raw_codes
+```
+
+```{r}
+head(dwi_raw)
+```
+
+Codes we wanted to get, but we don't have
+
+```{r}
+check_dwi <- official_dwi_codes %>%
+  anti_join(dwi_raw, by = c("county_offense_code" = "OFFENSE-CODE"))
+
+check_dwi
+```
+
+## Cleaning the charges csv files
+
+Codes we got, but we don't want to look at
+
+```{r}
+clean_dwi_anti <- dwi_raw %>%
+  anti_join(official_dwi_codes, by = c("OFFENSE-CODE" = "county_offense_code")) %>%
+  group_by(`OFFENSE-DESC`) %>%
+  tally()
+
+clean_dwi_anti
+```
+
+Okay, that seems okay to me -- let's clean up
+
+```{r}
+clean_dwi_pre <- dwi_raw %>%
+  inner_join(official_dwi_codes, by = c("OFFENSE-CODE" = "county_offense_code")) %>%
+  mutate("BIRTHDATE" = mdy(`BIRTHDATE`)) %>%
+  mutate("OFFENSE-DATE" = mdy(`OFFENSE-DATE`)) %>%
+  mutate("CUSTODY-DATE" = mdy(`CUSTODY-DATE`)) %>%
+  mutate("COMPLAINT-DATE" = ymd(`COMPLAINT-DATE`)) %>%
+  mutate("CASE-DATE" = mdy(`CASE-DATE`)) %>%
+  mutate("SETTING-DATE" = mdy(`SETTING-DATE`)) %>%
+  mutate("G-JURY-DATE" = mdy(`G-JURY-DATE`)) %>%
+  mutate("DISPOSITION-DATE" = mdy(`DISPOSITION-DATE`)) %>%
+  mutate("JUDGEMENT-DATE" = mdy(`JUDGEMENT-DATE`)) %>%
+  mutate("SENTENCE-START-DATE" = mdy(`SENTENCE-START-DATE`)) %>%
+  mutate("SENTENCE-END-DATE" = mdy(`SENTENCE-END-DATE`)) %>%
+  mutate("POST-JUDICIAL-DATE" = mdy(`POST-JUDICIAL-DATE`)) %>%
+  mutate("BOND-DATE" = mdy(`BOND-DATE`)) %>%
+  mutate("original_sentence_years" = substr(`ORIGINAL-SENTENCE`, 1, 3)) %>%
+  mutate("original_sentence_months" = substr(`ORIGINAL-SENTENCE`, 6, 7)) %>%
+  mutate("original_sentence_days" = substr(`ORIGINAL-SENTENCE`, 11, 12)) %>%
+  mutate("original_sentence_hours" = substr(`ORIGINAL-SENTENCE`, 16, 18)) %>%
+  mutate("offense_date_clean" = ymd(`offense_date_clean`)) %>%
+  mutate("FULL-NAME" = str_to_title(`FULL-NAME`)) %>%
+  mutate("offense_year" = floor_date(`OFFENSE-DATE`, unit = "year")) %>%
+  mutate("judgement_year" = floor_date(`JUDGEMENT-DATE`, unit = "year")) %>%
+  ## May 10: adding this in so we can sort by DA
+  mutate(da_in_power = case_when(
+    judgement_year >= as.Date("2009-01-01") & judgement_year <= as.Date("2014-01-01") ~ "Susan Reed", 
+    judgement_year >= as.Date("2015-01-01") & judgement_year <= as.Date("2018-01-01") ~ "Nico Lahood",
+    judgement_year >= as.Date("2019-01-01") ~ "Joe Gonzales",
+    is.na(judgement_year) & offense_year >= as.Date("2009-01-01") & offense_year <= as.Date("2014-01-01") ~ paste("Susan Reed BY OFFENSE YEAR", offense_year, sep = " "),
+    is.na(judgement_year) & offense_year >= as.Date("2015-01-01") & offense_year <= as.Date("2018-01-01") ~ paste("Nico Lahood BY OFFENSE YEAR", offense_year, sep = " "),
+    is.na(judgement_year) & offense_year >= as.Date("2019-01-01") ~ paste("Joe Gonzales BY OFFENSE YEAR", offense_year, sep = " "),
+  )) %>%
+  #select(-judgement_year) %>%
+  clean_names() %>%
+  select(-x1) %>%
+  distinct()
+
+
+clean_dwi_pre
+```
+
+This clean_dwi_pre file includes the "obstruction passageway" cases that are not alcohol-related. We will remove that in a later step
+
+```{r}
+clean_dwi_offense_group <- clean_dwi_pre %>%
+  group_by(offense_description, reduced_offense_desc) %>%
+  tally() 
+  #filter(grepl("OBSTRUCT", paste(offense_description, reduced_offense_desc)))
+
+clean_dwi_offense_group
+```
+
+```{r}
+clean_dwi_offense_group_no_reduce <- clean_dwi_pre %>%
+  group_by(offense_description) %>%
+  tally() 
+  #filter(grepl("OBSTRUCT", paste(offense_description, reduced_offense_desc)))
+
+clean_dwi_offense_group_no_reduce
+```
+
+Brian always asks for the maximum date in our dataset so I need to remember that this is it:
+
+```{r}
+max(clean_dwi_pre$offense_date)
+```
+
+```{r}
+min(clean_dwi_pre$offense_date)
+```
+
+## Uploading the scraped csv files, case details
+
+Case details are information we pulled from each person's detailed case page. The ryan-scrape folder shows the code we used to scrape tables from specific URLs we generated
+
+```{r}
+scraped_april_1 <- read_csv("Data/my_exports/April17/dwi.csv") %>%
+  filter(eventDescription != "Timeout error") %>%
+  mutate(sid = as.character(sid)) 
+
+## June 6th update -- some URLs weren't scraped so here's what we found. Still some people aren't on the site. 
+
+scraped_april_2 <- read_csv("Data/scraped/ryan/fixedURLs.csv")%>%
+  mutate(sid = as.character(sid)) 
+
+scraped_april_3 <- read_csv("Data/scraped/ryan/timeouts.csv")%>%
+  mutate(sid = as.character(sid)) 
+
+scraped_april <- rbind(scraped_april_1, scraped_april_2, scraped_april_3)%>%
+  mutate(sid = as.character(sid)) 
+```
+
+These people should have obstruction in the title
+
+```{r}
+check <- scraped_april %>%
+  group_by(offense_description, reduced_offense_desc) %>%
+  tally()
+
+check
+```
+
+## Cleaning the csv data: scraped files
+
+### Prep to eliminate not-alcohol obstruction passageway
+
+Here, I'm making sure the data processes as I want it to be. Particularly -- that dates are processed as dates. I'm looking at a charge that was "reduced" to something more elevated
+
+```{r}
+clean_scraped_prep <- scraped_april %>%
+  #mutate(birthDate = mdy(birthDate)) %>%
+  select(-birthDate) %>%
+  mutate(eventDate = mdy(eventDate)) %>%
+  mutate(case_cause_nbr = as.character(case_cause_nbr)) %>%
+  filter(is.na(reduced_offense_desc) | reduced_offense_desc != "DRIVING WHILE INTOXICATED") %>%
+  filter(is.na(reduced_offense_desc) | reduced_offense_desc != "DWI W/BAC 0.15 OR HIGHER") 
+  
+  #mutate(case_cause_nbr = if_else(case_cause_nbr == "0", "2019CR5617W", case_cause_nbr))
+
+
+clean_scraped_prep
+```
+
+How many people are in this dataset?
+
+```{r}
+clean_scraped_prep_ppl <- clean_scraped_prep %>%
+  group_by(sid) %>%
+  tally()
+
+clean_scraped_prep_ppl
+```
+
+There are 19,714 rows, thus 19,714 people who have been charged with obstruction between Jan. 1, 2009 and Jan. 13, 2022
+
+```{r}
+clean_scraped_prep_ppl_case <- clean_scraped_prep %>%
+  group_by(case_cause_nbr) %>%
+  tally()
+
+clean_scraped_prep_ppl_case
+```
+
+There are 19,774 rows, thus 19,774 cases of obstruction between Jan. 1, 2009 and Jan. 13, 2022 
+
+This is a person who must be in here. Let's double check their existence
+
+```{r}
+hilario <- clean_scraped_prep %>%
+  filter(sid == 1087579)
+
+hilario
+```
+
+They exist
+
+### About the scraped (detailed case) data
+
+**Just to review**:
+
+full_name = the person's name
+
+url = the source where the data is from
+
+birthDate = the person's birthday --- I think there is a small problem with this field and it got messed up after the scraping incident, but I'm not worried about it
+
+sex = sex
+
+race = race/ethnicity -- it's a weird column, not reliable, but gives a general idea of the individual's race
+
+offense_description = description of offense
+
+reduced_offense_description = if applicable, the description of the reduced offense
+
+court = court it was in
+
+case_cause_nbr = case number
+
+sid = a unique number for an individual
+
+character_cnt = ignore, filed used to help me generate the url
+
+eventDate = so we are pulling information from the table, located on the url. That table has all of the docket related events. This is the date of the docket-related event
+
+eventDescription = so we are pulling information from the table, located on the url. That table has all of the docket related events. This is the description of the docket-related event
+
+**Data to look for**
+
+clean_scrape_prep = dataset that includes EVERY obstruction charge and the docket lines associated with the person and that charge clean_scrape = the work I do below to only look at DWI info in the obstruction charges
+
+**The Charges**
+
+And we are looking at obstruction-related charges. Here are those specific charges and the number of times they occur (column n)
+
+```{r}
+count_charges <- clean_scraped_prep %>%
+  select(sid, offense_description, reduced_offense_desc) %>%
+  distinct() %>%
+  group_by(offense_description, reduced_offense_desc) %>%
+  tally()  %>%
+  arrange(desc(n))
+
+count_charges
+```
+
+# Defining alcohol-related cases
+
+## Looking for DWI events
+
+Now -- I need to figure out what events are the best to look at because we care about how many of these people have a DWI-related docket event So this is where I do a key word search. Basically, give me "DWI", "BAC", "BA C 0.15", "DRIVING WHILE INTOXICATED" BUT don't give me "BACK", "BACH", "NO ALCOHOL", or "WURZBAC" (I know to filter these out through trial and error)
+
+```{r}
+dwi_events <- clean_scraped_prep %>%
+  filter(grepl("DWI", eventDescription) | grepl("BAC", eventDescription) | grepl("BA C 0.15", eventDescription) | grepl("DRIVING WHILE INTOXICATED", eventDescription)) %>%
+  filter(!grepl("BACK", eventDescription) & !grepl("BACH", eventDescription) & !grepl("NO ALCOHOL", eventDescription) & !grepl("WURZBAC", eventDescription)) %>%
+  group_by(eventDescription) %>%
+  tally() %>%
+  arrange(desc(n))
+
+dwi_events
+```
+
+I looked through this, and I believe these are the charges we want here as defined in the variables: 
+
+```{r}
+official_dwi_events <- c("MB 540409 DRIVING WHILE INTOXICATED", "BA C 0.15 OR HIGHER", "MA 540411 DRIVING WHILE INTOXICATED-2D", "BAC 0.15 OR HIGHER", "MA 540403 DRIVING WHILE INTOXICATED 1S", "540409 DRIVING WHILE INTOXICATED","540409 DRIVING WHILE INTOXICATED", "F3 540412 DRIVING WHILE INTOXICATED-3D", "F3 540413 INTOXICA TION ASSAULT", "DRIVING WHILE INTOXICATED", "540416", "530721", "540414", "540415", "540410")
+
+bac_specific_official_dwi_events <- c("BA C 0.15 OR HIGHER", "BAC 0.15 OR HIGHER")
+```
+
+Now, I am looking for those specific docket events in our scraped data
+
+```{r}
+clean_scraped <- clean_scraped_prep %>%
+  filter(grepl(paste(official_dwi_events, collapse= "|"), eventDescription)) %>%
+  filter(is.na(reduced_offense_desc) | reduced_offense_desc != "DRIVING WHILE INTOXICATED")  %>%
+  filter(is.na(reduced_offense_desc) | reduced_offense_desc != "DWI W/BAC 0.15 OR HIGHER")
+
+clean_scraped
+```
+
+Okay -- so I am looking at the specific docket lines I am interested in, which is helpful -- but I need to focus on the cases. 
+
+Super important to note than the "n" column really doesn't matter. It's a tally of the number of times information in the row appears in all of the docket lines. 
+
+```{r}
+check_charges <- clean_scraped %>%
+  group_by(offense_description, reduced_offense_desc) %>%
+  tally()
+
+check_charges
+```
+
+```{r}
+check_events <- clean_scraped %>%
+  group_by(eventDescription) %>%
+  tally()
+
+check_events
+```
+
+And here are the case numbers we care about!
+
+```{r}
+dwi_case_numbers <- clean_scraped %>%
+  distinct(case_cause_nbr) %>%
+  mutate(case_cause_nbr = as.character(case_cause_nbr))
+
+dwi_case_numbers
+```
+
+And here are the case numbers that are obstruction and are actually obstruction (meaning not alcoholic)!
+
+```{r}
+nondwi_obst <- clean_dwi_pre %>%
+  anti_join(dwi_case_numbers) %>%
+  filter(grepl("OBSTRUC", offense_description)) %>%
+  filter(offense_description != "OBSTRUCT HIGHWAY-INTOXICATION")
+
+nondwi_obst
+```
+
+```{r}
+nondwi_obst_cases <- nondwi_obst %>%
+  group_by(case_cause_nbr) %>%
+  tally()
+
+nondwi_obst_cases
+```
+
+The official dwi cases, no more of the regular, non-alcohol passageway obstruction
+
+```{r}
+clean_dwi <- clean_dwi_pre %>%
+  anti_join(nondwi_obst, by = c("case_cause_nbr", "offense_desc"))
+
+clean_dwi
+```
+
+Don't mind me, obsessively checking the offense desc and the reduced offense desc
+
+```{r}
+check_charges <- clean_dwi %>%
+  group_by(offense_desc, reduced_offense_desc) %>%
+  tally()
+
+check_charges
+```
+
+```{r}
+ppl <- clean_dwi %>%
+  group_by(sid) %>%
+  tally()
+
+ppl
+```
+
+# Analysis
+
+## Scraped Case Information
+
+### General Analysis, all obstruction codes
+
+Now I want to know how many people are in this dataset. The "n" column is the number of times they appear in my dataset of just "DWI-related" docket events. We can ignore that.
+
+```{r}
+people_in_here <- clean_scraped %>%
+  group_by(sid) %>%
+  tally()
+
+people_in_here
+```
+
+Answer: of the 19,714 who had an obstruction charge, about 19,444 had some sort of DWI indication. I know this because there are 19,444 rows
+
+```{r}
+people_case_in_here <- clean_scraped %>%
+  group_by(sid, case_cause_nbr) %>%
+  #group_by(sid) %>%
+  tally()
+
+people_case_in_here
+```
+
+And of the 19,774 cases, 19,492 of them were related to drinking.
+
+### Passageway/Roadway Analysis
+
+Now I want to look at people who only have this charge and see if they have alcohol-related stuff
+
+So we go to the DWI docket event data, and say -- give me only those with the passageway/roadway charge
+
+Now let's count the people
+
+```{r}
+passageway <- clean_scraped %>%
+  filter(grepl("OBSTRUCT PASSAGEWAY/ROADWAY", offense_description) | grepl("OBSTRUCT PASSAGEWAY/ROADWAY", reduced_offense_desc)) %>%
+  filter(is.na(reduced_offense_desc) | reduced_offense_desc != "OBSTRUCT HIGHWAY-INTOXICATION") %>%
+  arrange(sid)
+
+passageway
+```
+
+Quick docket check for Allie
+
+```{r}
+#write_csv(passageway, "Data/my_exports/allie_check_passageway.csv")
+```
+
+```{r}
+passageway_check_docket <- passageway %>%
+  group_by(eventDescription) %>%
+  tally()
+
+passageway_check_docket
+```
+
+
+Let me double check I'm looking at the charges I want to look at.
+
+```{r}
+passageway_offense_desc <- passageway %>%
+  select(sid, offense_description, reduced_offense_desc) %>%
+  distinct() %>%
+  group_by(offense_description, reduced_offense_desc) %>%
+  tally()  %>%
+  arrange(desc(n))
+
+passageway_offense_desc
+```
+
+And now let's count the people with the charge
+
+```{r}
+passageway_ppl <- passageway %>%
+  group_by(sid) %>%
+  tally() 
+
+passageway_ppl
+
+```
+
+There are 3,562 people that have an indication of a DWI in the dataset — though their charge language doesn't have any indication of intoxication
+
+```{r}
+passageway_case <- passageway %>%
+  group_by(case_cause_nbr) %>%
+  tally()  %>%
+  arrange(-n)
+
+passageway_case
+```
+
+There are 3,563 cases that have an indication of a DWI in the dataset with 3,562 people
+
+But I know the main criteria we want to look for is a BAC above 0.15 or higher. So how many of these people had a BAC of 0.15 or higher?
+
+All the BAC events:
+
+```{r}
+pass_BAC_events <- passageway %>%
+  filter(grepl(paste(bac_specific_official_dwi_events, collapse="|)"), eventDescription)) 
+
+pass_BAC_events
+```
+
+All the BAC people:
+
+```{r}
+people_pass_BAC <- pass_BAC_events %>%
+  group_by(sid) %>%
+  tally()
+
+people_pass_BAC
+```
+
+There are 1,385 people with a BAC of 0.15 or higher.
+
+```{r}
+case_pass_BAC <- pass_BAC_events %>%
+  group_by(case_cause_nbr) %>%
+  tally()
+
+case_pass_BAC
+```
+
+There are 1,385 cases with a BAC of 0.15 or higher.
+
+But you are probably wondering -- well how many people had this passageway roadway charge?
+
+Let's look at the dataset before we filtered for DWI people
+
+```{r}
+count_all_passageway <- clean_scraped_prep %>%
+  filter(grepl("OBSTRUCT PASSAGEWAY/ROADWAY", offense_description) | grepl("OBSTRUCT PASSAGEWAY/ROADWAY", reduced_offense_desc)) %>%
+  filter(is.na(reduced_offense_desc) | reduced_offense_desc != "OBSTRUCT HIGHWAY-INTOXICATION") %>%
+  group_by(sid) %>%
+  #group_by(sid, case_cause_nbr) %>%
+  tally()
+  
+count_all_passageway
+```
+
+**Final Finding**: Of the 3,837 cases with obstruction of passageway charge between Jan. 2, 2009 and Jan. 13, 2022, 3,562 of them have been associated with a drinking above the legal limit. 1,385 people had a blood alcohol content above 0.15.
+
+### Highway Intox Obstruction
+
+Okay, let's look at people with the obstruction highway-intoxication charge.
+
+First all of the docket events with this charge:
+
+```{r}
+highway_intox <- clean_scraped %>%
+  filter(grepl("OBSTRUCT HIGHWAY-INTOX", offense_description) | grepl("OBSTRUCT HIGHWAY-INTOX", reduced_offense_desc)) %>%
+  filter(is.na(reduced_offense_desc) | reduced_offense_desc != "OBSTRUCT PASSAGEWAY/ROADWAY/WA")
+
+highway_intox
+```
+
+Just to prove to myself that I am in fact looking at people with these only these charges, let's double check:
+
+```{r}
+highway_intox_offense_desc <- highway_intox %>%
+  select(sid, offense_description, reduced_offense_desc) %>%
+  distinct() %>%
+  group_by(offense_description, reduced_offense_desc) %>%
+  tally()  %>%
+  arrange(desc(n))
+
+highway_intox_offense_desc
+```
+
+Now the number of people with this charge
+
+```{r}
+case_in_here_highway_intox <- highway_intox %>%
+  group_by(case_cause_nbr) %>%
+  #group_by(sid) %>%
+  tally()
+
+case_in_here_highway_intox
+```
+
+```{r}
+people_in_here_highway_intox <- highway_intox %>%
+  group_by(sid) %>%
+  tally()
+
+people_in_here_highway_intox
+```
+
+So, there are 15,929 cases charged with (or had their charge reduced to) "OBSTRUCT HIGHWAY-INTOXICATION." 15,891 people
+
+But I know the main criteria we want to look for is a BAC above 0.15 or higher. So how many of these people had a BAC of 0.15 or higher?
+
+All the BAC events:
+
+```{r}
+highway_intox_BAC <- highway_intox %>%
+  filter(grepl(paste(bac_specific_official_dwi_events, collapse="|)"), eventDescription)) 
+
+highway_intox_BAC
+```
+
+All the BAC cases:
+
+```{r}
+case_highway_intox_BAC <- highway_intox_BAC %>%
+  group_by(case_cause_nbr) %>%
+  tally()
+
+case_highway_intox_BAC
+```
+
+3,564 cases of BAC  0.15 in highway intoxication
+
+How many people?
+
+```{r}
+people_highway_intox_BAC <- highway_intox_BAC %>%
+  group_by(sid) %>%
+  tally()
+
+people_highway_intox_BAC
+```
+
+So there are 3,564 cases who had a BAC above 0.15 3,558 people
+
+How many people in total had a highway intoxication charge?
+
+```{r}
+count_all_highway_intox <- clean_scraped_prep %>%
+  filter(grepl("OBSTRUCT HIGHWAY-INTOX", offense_description) | grepl("OBSTRUCT HIGHWAY-INTOX", reduced_offense_desc)) %>%
+  filter(is.na(reduced_offense_desc) | reduced_offense_desc != "OBSTRUCT PASSAGEWAY/ROADWAY/WA") %>%
+  group_by(case_cause_nbr) %>%
+  tally()
+
+  
+count_all_highway_intox
+```
+
+**Final Finding**: Of the 15,929 cases with an obstruction highway intoxication charge between Jan. 1, 2009 and Jan. 13, 2022, 15,929 of them have been associated with a drinking above the legal limit. 3,564 of the cases had a docket line indicating that their BAC was above 0.15.
+
+
+
+
+## BAC master
+
+```{r}
+bac_master <- clean_scraped %>%   
+  filter(grepl(paste(bac_specific_official_dwi_events, collapse="|)"), eventDescription)) 
+
+
+bac_ppl <- bac_master %>%
+  group_by(sid) %>%
+  tally() %>%
+  arrange(desc(n))
+
+bac_ppl
+```
+
+Check a random person's docket
+
+```{r}
+docket_1099456 <- clean_scraped %>%
+  filter(sid == 1099456)
+
+docket_1099456
+```
+
+## DWI master
+
+```{r}
+dwi_master <- clean_scraped %>%   
+  filter(grepl(paste(official_dwi_events, collapse="|"), eventDescription)) 
+
+
+dwi_ppl <- dwi_master %>%
+  group_by(sid) %>%
+  tally() %>%
+  arrange(desc(n))
+
+dwi_ppl
+```
+
+## Dated after Oct. 27, 2020
+
+This is for a specific point in the story
+
+```{r}
+oct27 <- clean_scraped %>%
+  filter(eventDate > as.Date("2020-10-27")) 
+ 
+
+oct27
+```
+
+```{r}
+oct27_ppl <- oct27 %>%
+ group_by(case_cause_nbr) %>%
+  tally()
+
+oct27_ppl
+```
+
+490 people
+
+```{r}
+oct27_BAC_events <- oct27 %>%
+  filter(grepl(paste(bac_specific_official_dwi_events, collapse="|)"), eventDescription)) 
+
+oct27_BAC_events
+```
+
+```{r}
+oct27_BAC_ppl <- oct27_BAC_events %>%
+ group_by(case_cause_nbr) %>%
+  tally()
+
+oct27_BAC_ppl
+```
+
+
+

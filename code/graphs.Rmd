@@ -1,0 +1,240 @@
+---
+title: "DWI: Graphs"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+library(janitor)
+library(readxl)
+library(lubridate)
+library(tidycensus)
+```
+
+# Population prep
+
+```{r}
+acs1_vars <- load_variables(2010, "acs1")
+
+acs1_vars <- acs1_vars %>%
+  filter(grepl("18 years and over", label))
+         #& grepl("AGE", concept) & !grepl("ALONE", concept))
+```
+
+```{r}
+acs1_vars
+```
+
+
+
+```{r}
+var <- c("B05003_019", "B05003_008")
+
+pop18_and_over_2021 <- get_acs(
+  geography = "place",
+  variables = var,
+  survey = "acs1",
+  year = 2021
+) %>%
+  select(-moe) %>%
+  pivot_wider(names_from = variable, values_from = estimate) %>%
+  mutate(total_18_plus_pop_2021 = B05003_008 + B05003_019) %>%
+  select(-B05003_019, -B05003_008) %>%
+  filter(GEOID == "4805000" | GEOID == "4819000" | GEOID == "4827000" | GEOID == "4835000" | GEOID == "4865000")
+
+pop18_and_over_2021
+
+
+pop18_and_over_2019 <- get_acs(
+  geography = "place",
+  variables = var,
+  survey = "acs1",
+  year = 2019
+) %>%
+  select(-moe) %>%
+  pivot_wider(names_from = variable, values_from = estimate) %>%
+  mutate(total_18_plus_pop_2019 = B05003_008 + B05003_019) %>%
+  select(-B05003_019, -B05003_008) %>%
+  filter(GEOID == "4805000" | GEOID == "4819000" | GEOID == "4827000" | GEOID == "4835000" | GEOID == "4865000")
+
+pop18_and_over_2018 <- get_acs(
+  geography = "place",
+  variables = var,
+  survey = "acs1",
+  year = 2018
+) %>%
+  select(-moe) %>%
+  pivot_wider(names_from = variable, values_from = estimate) %>%
+  mutate(total_18_plus_pop_2018 = B05003_008 + B05003_019) %>%
+  select(-B05003_019, -B05003_008) %>%
+  filter(GEOID == "4805000" | GEOID == "4819000" | GEOID == "4827000" | GEOID == "4835000" | GEOID == "4865000")
+
+
+pop18_and_over_2017 <- get_acs(
+  geography = "place",
+  variables = var,
+  survey = "acs1",
+  year = 2017
+) %>%
+  select(-moe) %>%
+  pivot_wider(names_from = variable, values_from = estimate) %>%
+  mutate(total_18_plus_pop_2017 = B05003_008 + B05003_019) %>%
+  select(-B05003_019, -B05003_008) %>%
+  filter(GEOID == "4805000" | GEOID == "4819000" | GEOID == "4827000" | GEOID == "4835000" | GEOID == "4865000")
+
+pop18_and_over_2016 <- get_acs(
+  geography = "place",
+  variables = var,
+  survey = "acs1",
+  year = 2016
+) %>%
+  select(-moe) %>%
+  pivot_wider(names_from = variable, values_from = estimate) %>%
+  mutate(total_18_plus_pop_2016 = B05003_008 + B05003_019) %>%
+  select(-B05003_019, -B05003_008) %>%
+  filter(GEOID == "4805000" | GEOID == "4819000" | GEOID == "4827000" | GEOID == "4835000" | GEOID == "4865000")
+
+pop18_and_over_2015 <- get_acs(
+  geography = "place",
+  variables = var,
+  survey = "acs1",
+  year = 2015
+) %>%
+ select(-moe) %>%
+  pivot_wider(names_from = variable, values_from = estimate) %>%
+  mutate(total_18_plus_pop_2015 = B05003_008 + B05003_019) %>%
+  select(-B05003_019, -B05003_008) %>%
+  filter(GEOID == "4805000" | GEOID == "4819000" | GEOID == "4827000" | GEOID == "4835000" | GEOID == "4865000")
+
+pop18_and_over_2014 <- get_acs(
+  geography = "place",
+  variables = var,
+  survey = "acs1",
+  year = 2014
+) %>%
+  select(-moe) %>%
+  pivot_wider(names_from = variable, values_from = estimate) %>%
+  mutate(total_18_plus_pop_2014 = B05003_008 + B05003_019) %>%
+  select(-B05003_019, -B05003_008) %>%
+  filter(GEOID == "4805000" | GEOID == "4819000" | GEOID == "4827000" | GEOID == "4835000" | GEOID == "4865000")
+
+pop18_and_over_2013 <- get_acs(
+  geography = "place",
+  variables = var,
+  survey = "acs1",
+  year = 2013
+) %>%
+  select(-moe) %>%
+  pivot_wider(names_from = variable, values_from = estimate) %>%
+  mutate(total_18_plus_pop_2013 = B05003_008 + B05003_019) %>%
+  select(-B05003_019, -B05003_008) %>%
+  filter(GEOID == "4805000" | GEOID == "4819000" | GEOID == "4827000" | GEOID == "4835000" | GEOID == "4865000")
+
+
+pop18_and_over_2012 <- get_acs(
+  geography = "place",
+  variables = var,
+  survey = "acs1",
+  year = 2012
+) %>%
+  select(-moe) %>%
+  pivot_wider(names_from = variable, values_from = estimate) %>%
+  mutate(total_18_plus_pop_2012 = B05003_008 + B05003_019) %>%
+  select(-B05003_019, -B05003_008) %>%
+  filter(GEOID == "4805000" | GEOID == "4819000" | GEOID == "4827000" | GEOID == "4835000" | GEOID == "4865000")
+
+
+pop18_and_over_2011 <- get_acs(
+  geography = "place",
+  variables = var,
+  survey = "acs1",
+  year = 2011
+) %>%
+  select(-moe) %>%
+  pivot_wider(names_from = variable, values_from = estimate) %>%
+  mutate(total_18_plus_pop_2011 = B05003_008 + B05003_019) %>%
+  select(-B05003_019, -B05003_008) %>%
+  filter(GEOID == "4805000" | GEOID == "4819000" | GEOID == "4827000" | GEOID == "4835000" | GEOID == "4865000")
+
+
+pop18_and_over_2010 <- get_acs(
+  geography = "place",
+  variables = var,
+  survey = "acs1",
+  year = 2010
+) %>%
+  select(-moe) %>%
+  pivot_wider(names_from = variable, values_from = estimate) %>%
+  mutate(total_18_plus_pop_2010 = B05003_008 + B05003_019) %>%
+  select(-B05003_019, -B05003_008) %>%
+  filter(GEOID == "4805000" | GEOID == "4819000" | GEOID == "4827000" | GEOID == "4835000" | GEOID == "4865000")
+
+
+
+```
+
+```{r}
+pop18_and_over <- pop18_and_over_2010 %>%
+  full_join(pop18_and_over_2011, by = c("GEOID", "NAME")) %>%
+  full_join(pop18_and_over_2012, by = c("GEOID", "NAME")) %>%
+  full_join(pop18_and_over_2013, by = c("GEOID", "NAME")) %>%
+  full_join(pop18_and_over_2014, by = c("GEOID", "NAME")) %>%
+  full_join(pop18_and_over_2015, by = c("GEOID", "NAME")) %>%
+  full_join(pop18_and_over_2016, by = c("GEOID", "NAME")) %>%
+  full_join(pop18_and_over_2017, by = c("GEOID", "NAME")) %>%
+  full_join(pop18_and_over_2018, by = c("GEOID", "NAME")) %>%
+  full_join(pop18_and_over_2019, by = c("GEOID", "NAME")) %>%
+  full_join(pop18_and_over_2021, by = c("GEOID", "NAME")) 
+
+pop18_and_over
+```
+
+
+# Reading in Data
+Full Disclosure: I worked with this in Excel before I brought it to R, that's why the populations numbers are already in this file
+
+```{r}
+raw_crashes <- read_excel("Data/city_dui_crashes_txdot/SanAntonioCity-dwi-crashes-injuries.xlsx", sheet = "copy") %>%
+  clean_names() %>%
+  select(-c(17:25), -arrests)
+```
+
+```{r}
+head(raw_crashes)
+```
+
+
+# Crash Data
+
+Questions to answer:
+- how many total crashes
+- how many total victims
+- how many crashes per capita
+
+```{r}
+crashes <- raw_crashes %>%
+  mutate(total_crashes = fatal_crashes + suspected_serious_crashes + non_incapacitating_crashes + possible_injury_crashes + non_injury_crashes + unknown_severrity_crashes, total_injuries = fatalities + suspected_serious_injuries + non_incapacitating_injuries, total_people_affected = fatalities + suspected_serious_injuries + non_incapacitating_injuries + possible_injuries + non_injuries + unknown_injuries) %>%
+  mutate(crashes_per_capita = (total_crashes/x18_and_over_pop)*100000)
+
+crashes
+```
+
+okay average of deaths caused by city
+
+```{r}
+deaths <- crashes %>%
+  group_by(city) %>%
+  summarise(avg_fatal = mean(fatalities))
+
+deaths
+```
+
+Isolate 2021 and SA
+
+```{r}
+sa2021 <- crashes %>%
+  filter(city == "San Antonio" & year == 2021)
+
+sa2021
+```
+

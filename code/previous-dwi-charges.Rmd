@@ -1,0 +1,297 @@
+---
+title: "Prior Convinction"
+output: html_notebook
+---
+
+My tools
+
+```{r}
+library(tidyverse)
+#for general coding
+library(janitor)
+#for cleaning
+library(lubridate)
+#for working with dates
+library(readxl)
+#for working with excel files
+library(fuzzyjoin)
+#for working with imperfect strings
+library(reshape2)
+```
+
+# Pivoting the case data
+
+As I've been working with this data, I realized that a couple of people have appeared in this dataset a couple of times. So, instead of looking at each incident, let's look at each person
+
+There are lots of identifying columns, but it's best to stick with sid: state identification number, or something like that.
+
+So, how many individuals do we have?
+
+```{r}
+individual <- clean_dwi %>%
+  group_by(sid) %>%
+  tally() %>%
+  arrange(desc(n))
+
+individual
+```
+
+Let's include the number of charges they have in the original dataset
+
+```{r}
+full <- individual %>%
+  inner_join(clean_dwi, by = c("sid")) %>%
+  arrange(desc(n))
+
+full
+```
+
+As I've been working with the dataset, I've realized that some people have multiple charges on the same day. So in order to display the data in the cleanest way, I'm going to split each charge into parts. So, if they have two charges on the same day, one would be labeled as 2.1 and the other as 2.2
+
+To start, let's make the multiple charges column
+
+```{r}
+charges_on_same_day <- clean_dwi %>%
+  group_by(sid, offense_date) %>%
+  tally() %>%
+  rename(charges_on_day = n) %>%
+  full_join(full) 
+  
+
+charges_on_same_day
+```
+
+So now I'm ranking offense dates. This will allow me to pivot wider so I can look and see "offense 1" and the info about that "offense 2" and the info about that
+
+```{r}
+wider_cleaning <- charges_on_same_day %>%
+  arrange(sid, offense_date_clean) %>%
+  group_by(sid) %>%
+  mutate(offense_number = case_when(
+    charges_on_day != n ~ rank(offense_date, ties.method="min"), 
+    )) %>%
+  mutate(offense_number = ifelse(is.na(offense_number), 1, offense_number)) %>%
+  group_by(sid, offense_date) %>%
+  mutate(seq_num = seq_along(offense_date)) %>%
+  mutate(seq_num = ifelse(charges_on_day == 1, 0, seq_num)) %>%
+  mutate(offense_number_clean = paste("offense", "_", offense_number, ".", seq_num, sep = "")) %>%
+  rename(total_charges = n) %>%
+  arrange(-total_charges)
+
+wider_cleaning 
+```
+
+A quick check 
+
+```{r}
+sid443895_wider <- wider_cleaning %>%
+  filter(sid == 443895) %>%
+  select(sid, full_name, offense_date, charges_on_day, total_charges, seq_num, offense_number_clean)
+
+sid443895_wider
+```
+
+How did everything turn out? 
+
+```{r}
+offense_sub_numbers <- wider_cleaning %>%
+  group_by(offense_number_clean, charges_on_day) %>%
+  tally() %>%
+  #filter(charges_on_day != 1) %>%
+  arrange(charges_on_day)
+
+offense_sub_numbers
+```
+
+Now to pivot!
+
+```{r}
+individual_by_charges <- wider_cleaning %>%
+  select(-offense_number) %>%
+  pivot_wider(id_cols = c(sid, total_charges), names_from = offense_number_clean, values_from = c(full_name, birthdate, sex, race, da_in_power, case_cause_nbr, offense_date, offense_code, offense_desc, offense_type, reduced_offense_code, reduced_offense_desc, reduced_offense_type, location, custody_date, complaint_date, case_date, case_desc, setting_date, setting_type, g_jury_date, g_jury_status, disposition_date, disposition_code, disposition_desc, judgement_date, judgement_code, judgement_desc, sentence_desc, sentence, sentence_start_date, sentence_end_date, fine_amount, court_costs, court_type, court, post_judicial_field, post_judicial_date, bond_date, bond_status, bond_amount, bondsman_name, attorney, attorney_bar_nbr, attorney_appointed_retained, intake_prosecutor, outtake_prosecutor, probation_prosecutor, revokation_prosecutor, original_sentence, judicial_nbr, unnamed_64, offense_desc_clean, offense_date_clean, class, offense_description, statute, lvl, state_offense_code, activation_date, original_sentence_years, original_sentence_months, original_sentence_days, original_sentence_hours, offense_year)) %>%
+  #unnest(cols = (7:1506)) %>%
+  arrange(sid) %>%
+  ungroup()
+
+individual_by_charges
+```
+
+
+And clean the pivot
+
+```{r}
+cleaning_individual_by_charges <- individual_by_charges %>%
+  select(-(1:2)) 
+
+cleanish_individual_by_charges <- cleaning_individual_by_charges[,order(colnames(cleaning_individual_by_charges))]
+
+id_columns_individual_by_charges <- individual_by_charges %>%
+  select(1:2)
+
+clean_individual_by_charges <- cbind(id_columns_individual_by_charges, cleanish_individual_by_charges) %>%
+  #select(-starts_with(c("offense_desc_clean", "offense_date_clean"))) %>%
+  select(total_charges, sid, starts_with(c("full_name", "birthdate", "sex", "race", "da_in_power", "case_cause", "offense_date", "offense_desc", "offense_code", "offense_type", "reduced_offense_desc", "reduced_offense_code", "reduced_offense_type", "location", "custody_date", "complaint_date", "case_date", "case_desc", "setting_date", "setting_type", "g_jury_date", "g_jury_status", "judgement_code", "judgement_desc", "sentence_desc", "sentence_start_date", "sentence_end_date", "sentence", "fine_amount", "court_costs", "court_type", "court", "post_judicial_field", "post_judicial_date", "bond_date", "bond_status", "bond_amount", "bondsman+name", "attorney", "attorney_bar_nbr", "attorney_appointed_retained", "intake_prosecutor", "outtake_prosecutor", "probation_prosecutor", "revokation_prosecutor", "original_sentence", "judicial_nbr", "class", "statute", "lvl", "state_offense_code", "activation_date", "original_sentence_years", "original_sentence_days", "original_sentence_hours", "offense_year")))
+
+clean_individual_by_charges
+```
+
+```{r}
+sid443895_onerow <- clean_individual_by_charges %>%
+  filter(sid == 443895) %>%
+  select(contains("date"))
+
+sid443895_onerow
+```
+
+Perfect
+
+# Analysis
+
+## How many people re-offended after obstruction?
+
+So, to do this, I need to do something like:
+1. Group people by their first original/reduced offense charge
+2. Find the people who have more than one charges, something in the "offense-2s" -- thus reoffended
+3. Take the number of people who reoffended in that category and the people who offended in that category, find out who reoffended after their first offense was obstruction
+
+
+```{r}
+more_than_one_charge <- clean_individual_by_charges %>%
+  filter(total_charges > 1) %>%
+  #I want to make sure their multiple charges are spread across multiple days so I need to make sure one of the second offense charges is not NA
+  filter(!is.na(offense_desc_offense_2.0) | !is.na(offense_desc_offense_2.1) | !is.na(offense_desc_offense_2.2) | !is.na(offense_desc_offense_2.3)) 
+
+more_than_one_charge
+```
+
+```{r}
+focused <- more_than_one_charge %>%
+  group_by(total_charges, offense_desc_offense_1.0, reduced_offense_desc_offense_1.0, offense_desc_offense_1.1, reduced_offense_desc_offense_1.1, offense_desc_offense_1.2, reduced_offense_desc_offense_1.2, offense_desc_offense_1.3, reduced_offense_desc_offense_1.3, offense_desc_offense_1.4, reduced_offense_desc_offense_1.4, offense_desc_offense_1.5, reduced_offense_desc_offense_1.5, offense_desc_offense_2.0, reduced_offense_desc_offense_2.0, offense_desc_offense_2.1, reduced_offense_desc_offense_2.1, offense_desc_offense_2.2, reduced_offense_desc_offense_2.2, offense_desc_offense_2.3, reduced_offense_desc_offense_2.3, offense_desc_offense_3.0, reduced_offense_desc_offense_3.0, offense_desc_offense_3.1, reduced_offense_desc_offense_3.1, offense_desc_offense_3.2, reduced_offense_desc_offense_3.2, offense_desc_offense_3.3, reduced_offense_desc_offense_3.3, offense_desc_offense_3.4, reduced_offense_desc_offense_3.4, offense_desc_offense_4.0, reduced_offense_desc_offense_4.0, offense_desc_offense_4.1, reduced_offense_desc_offense_4.1, offense_desc_offense_4.2, reduced_offense_desc_offense_4.2, offense_desc_offense_5.0, reduced_offense_desc_offense_5.0, offense_desc_offense_6.0, reduced_offense_desc_offense_6.0, offense_desc_offense_7.0, reduced_offense_desc_offense_7.0) %>%
+  tally()
+
+focused
+```
+
+```{r}
+example_charges <- more_than_one_charge %>%
+  group_by(offense_desc_offense_1.0) %>%
+  tally()
+
+example_charges
+```
+
+
+```{r}
+first_chage <- more_than_one_charge %>%
+  group_by(offense_desc_offense_1.0, reduced_offense_desc_offense_1.0) %>%
+  tally() %>%
+  mutate(first_charge_gen_includes_reduced = case_when(
+    grepl("OBSTRUCT", offense_desc_offense_1.0) | grepl("OBSTRUCT", reduced_offense_desc_offense_1.0)  ~ "Obstruction-related", 
+    grepl("DRIV", offense_desc_offense_1.0) | grepl("DW", offense_desc_offense_1.0) | grepl("DRIV", reduced_offense_desc_offense_1.0) | grepl("DW", reduced_offense_desc_offense_1.0) | grepl("DUI", offense_desc_offense_1.0) | grepl("DUI", reduced_offense_desc_offense_1.0) ~ "DWI-related",
+    grepl("INTOX", offense_desc_offense_1.0) | grepl("INTOX", reduced_offense_desc_offense_1.0) ~ "Intoxication Assault",
+    grepl("POSS", offense_desc_offense_1.0) & grepl("ALCOHOL", offense_desc_offense_1.0) | grepl("POSS", reduced_offense_desc_offense_1.0) & grepl("ALCOHOL", reduced_offense_desc_offense_1.0) ~ " Possession of Alcohol in Car",
+    TRUE ~ offense_desc_offense_1.0
+  )) %>%
+  group_by(first_charge_gen_includes_reduced) %>%
+  summarise(totl_count = sum(n))
+
+first_chage
+```
+
+```{r}
+driv <- c("DRIV", "DW", "DUI", "DWI")
+
+assault <- c("ASSAULT", "ASSLT", "MANSLAUGHTER")
+```
+
+
+```{r}
+first_chage_reduce_with_halves <- more_than_one_charge %>%
+   mutate(first_charge_gen_includes_reduced = case_when(
+     grepl("OBSTRUCT", paste(offense_desc_offense_1.1, offense_desc_offense_1.2, offense_desc_offense_1.3, offense_desc_offense_1.4, offense_desc_offense_1.5, reduced_offense_desc_offense_1.1, reduced_offense_desc_offense_1.2, reduced_offense_desc_offense_1.3, reduced_offense_desc_offense_1.4, reduced_offense_desc_offense_1.5))  &  grepl((paste(driv, collapse="|")), paste(offense_desc_offense_1.1, offense_desc_offense_1.2, offense_desc_offense_1.3, offense_desc_offense_1.4, offense_desc_offense_1.5, reduced_offense_desc_offense_1.1, reduced_offense_desc_offense_1.2, reduced_offense_desc_offense_1.3, reduced_offense_desc_offense_1.4, reduced_offense_desc_offense_1.5))  ~ "Obstruction & DWI Related",
+     grepl("OBSTRUCT", paste(offense_desc_offense_1.1, offense_desc_offense_1.2, offense_desc_offense_1.3, offense_desc_offense_1.4, offense_desc_offense_1.5, reduced_offense_desc_offense_1.1, reduced_offense_desc_offense_1.2, reduced_offense_desc_offense_1.3, reduced_offense_desc_offense_1.4, reduced_offense_desc_offense_1.5))  &  grepl((paste(assault, collapse="|")), paste(offense_desc_offense_1.1, offense_desc_offense_1.2, offense_desc_offense_1.3, offense_desc_offense_1.4, offense_desc_offense_1.5, reduced_offense_desc_offense_1.1, reduced_offense_desc_offense_1.2, reduced_offense_desc_offense_1.3, reduced_offense_desc_offense_1.4, reduced_offense_desc_offense_1.5))  ~ "Obstruction & Intox Related",
+    grepl("OBSTRUCT", paste(offense_desc_offense_1.0, offense_desc_offense_1.1, offense_desc_offense_1.2, offense_desc_offense_1.3, offense_desc_offense_1.4, offense_desc_offense_1.5, reduced_offense_desc_offense_1.0, reduced_offense_desc_offense_1.1, reduced_offense_desc_offense_1.2, reduced_offense_desc_offense_1.3, reduced_offense_desc_offense_1.4, reduced_offense_desc_offense_1.5)) ~ "Obstruction-related",
+    grepl("PUBLIC INTOX", paste(offense_desc_offense_1.0, offense_desc_offense_1.1, offense_desc_offense_1.2, offense_desc_offense_1.3, offense_desc_offense_1.4, offense_desc_offense_1.5, reduced_offense_desc_offense_1.0, reduced_offense_desc_offense_1.1, reduced_offense_desc_offense_1.2, reduced_offense_desc_offense_1.3, reduced_offense_desc_offense_1.4, reduced_offense_desc_offense_1.5)) ~ "Public Intoxication",
+     grepl((paste(driv, collapse="|")), paste(offense_desc_offense_1.0, offense_desc_offense_1.1, offense_desc_offense_1.2, offense_desc_offense_1.3, offense_desc_offense_1.4, offense_desc_offense_1.5, reduced_offense_desc_offense_1.0, reduced_offense_desc_offense_1.1, reduced_offense_desc_offense_1.2, reduced_offense_desc_offense_1.3, reduced_offense_desc_offense_1.4, reduced_offense_desc_offense_1.5)) ~ "DWI-related",
+    grepl((paste(assault, collapse="|")), paste(offense_desc_offense_1.0, offense_desc_offense_1.1, offense_desc_offense_1.2, offense_desc_offense_1.3, offense_desc_offense_1.4, offense_desc_offense_1.5)) | grepl((paste(driv, collapse="|")), paste(reduced_offense_desc_offense_1.0, reduced_offense_desc_offense_1.1, reduced_offense_desc_offense_1.2, reduced_offense_desc_offense_1.3, reduced_offense_desc_offense_1.4, reduced_offense_desc_offense_1.5))  ~ "Intoxication Assault",
+    grepl("POSS", paste(offense_desc_offense_1.0, offense_desc_offense_1.1, offense_desc_offense_1.2, offense_desc_offense_1.3, offense_desc_offense_1.4, offense_desc_offense_1.5, reduced_offense_desc_offense_1.0, reduced_offense_desc_offense_1.1, reduced_offense_desc_offense_1.2, reduced_offense_desc_offense_1.3, reduced_offense_desc_offense_1.4, reduced_offense_desc_offense_1.5)) & grepl("ALCOHOL", paste(offense_desc_offense_1.0, offense_desc_offense_1.1, offense_desc_offense_1.2, offense_desc_offense_1.3, offense_desc_offense_1.4, offense_desc_offense_1.5, reduced_offense_desc_offense_1.0, reduced_offense_desc_offense_1.1, reduced_offense_desc_offense_1.2, reduced_offense_desc_offense_1.3, reduced_offense_desc_offense_1.4, reduced_offense_desc_offense_1.5)) ~ " Possession of Alcohol in Car",
+  )) 
+#  group_by(first_charge_gen_includes_reduced) %>%
+ # tally()
+
+first_chage_reduce_with_halves
+```
+
+```{r}
+class_check <- first_chage_reduce_with_halves %>%
+  group_by(first_charge_gen_includes_reduced, offense_desc_offense_1.0, reduced_offense_desc_offense_1.0, offense_desc_offense_1.1, reduced_offense_desc_offense_1.1, offense_desc_offense_1.2, reduced_offense_desc_offense_1.2, offense_desc_offense_1.3, reduced_offense_desc_offense_1.3, offense_desc_offense_1.4, reduced_offense_desc_offense_1.4, offense_desc_offense_1.5, reduced_offense_desc_offense_1.5, offense_desc_offense_2.0, reduced_offense_desc_offense_2.0, offense_desc_offense_2.1, reduced_offense_desc_offense_2.1, offense_desc_offense_2.2, reduced_offense_desc_offense_2.2, offense_desc_offense_2.3, reduced_offense_desc_offense_2.3, offense_desc_offense_3.0, reduced_offense_desc_offense_3.0, offense_desc_offense_3.1, reduced_offense_desc_offense_3.1, offense_desc_offense_3.2, reduced_offense_desc_offense_3.2, offense_desc_offense_3.3, reduced_offense_desc_offense_3.3, offense_desc_offense_3.4, reduced_offense_desc_offense_3.4, offense_desc_offense_4.0, reduced_offense_desc_offense_4.0, offense_desc_offense_4.1, reduced_offense_desc_offense_4.1, offense_desc_offense_4.2, reduced_offense_desc_offense_4.2, offense_desc_offense_5.0, reduced_offense_desc_offense_5.0, offense_desc_offense_6.0, reduced_offense_desc_offense_6.0, offense_desc_offense_7.0, reduced_offense_desc_offense_7.0) %>%
+  tally()%>%
+  arrange(-n)
+
+class_check
+```
+
+
+
+```{r}
+count_charges_multiple <- first_chage_reduce_with_halves %>%
+  group_by(first_charge_gen_includes_reduced) %>%
+  tally() %>%
+  rename(reoffended_ppl_based_off_og_reduced_first_charge = n) 
+
+count_charges_multiple
+```
+
+```{r}
+ALL_first_chage_reduce_with_halves <- clean_individual_by_charges %>%
+   mutate(first_charge_gen_includes_reduced = case_when(
+     grepl("OBSTRUCT", paste(offense_desc_offense_1.1, offense_desc_offense_1.2, offense_desc_offense_1.3, offense_desc_offense_1.4, offense_desc_offense_1.5, reduced_offense_desc_offense_1.1, reduced_offense_desc_offense_1.2, reduced_offense_desc_offense_1.3, reduced_offense_desc_offense_1.4, reduced_offense_desc_offense_1.5))  &  grepl((paste(driv, collapse="|")), paste(offense_desc_offense_1.1, offense_desc_offense_1.2, offense_desc_offense_1.3, offense_desc_offense_1.4, offense_desc_offense_1.5, reduced_offense_desc_offense_1.1, reduced_offense_desc_offense_1.2, reduced_offense_desc_offense_1.3, reduced_offense_desc_offense_1.4, reduced_offense_desc_offense_1.5))  ~ "Obstruction & DWI Related",
+     grepl("OBSTRUCT", paste(offense_desc_offense_1.1, offense_desc_offense_1.2, offense_desc_offense_1.3, offense_desc_offense_1.4, offense_desc_offense_1.5, reduced_offense_desc_offense_1.1, reduced_offense_desc_offense_1.2, reduced_offense_desc_offense_1.3, reduced_offense_desc_offense_1.4, reduced_offense_desc_offense_1.5))  &  grepl((paste(assault, collapse="|")), paste(offense_desc_offense_1.1, offense_desc_offense_1.2, offense_desc_offense_1.3, offense_desc_offense_1.4, offense_desc_offense_1.5, reduced_offense_desc_offense_1.1, reduced_offense_desc_offense_1.2, reduced_offense_desc_offense_1.3, reduced_offense_desc_offense_1.4, reduced_offense_desc_offense_1.5))  ~ "Obstruction & Intox Related",
+    grepl("OBSTRUCT", paste(offense_desc_offense_1.0, offense_desc_offense_1.1, offense_desc_offense_1.2, offense_desc_offense_1.3, offense_desc_offense_1.4, offense_desc_offense_1.5, reduced_offense_desc_offense_1.0, reduced_offense_desc_offense_1.1, reduced_offense_desc_offense_1.2, reduced_offense_desc_offense_1.3, reduced_offense_desc_offense_1.4, reduced_offense_desc_offense_1.5)) ~ "Obstruction-related",
+    grepl("PUBLIC INTOX", paste(offense_desc_offense_1.0, offense_desc_offense_1.1, offense_desc_offense_1.2, offense_desc_offense_1.3, offense_desc_offense_1.4, offense_desc_offense_1.5, reduced_offense_desc_offense_1.0, reduced_offense_desc_offense_1.1, reduced_offense_desc_offense_1.2, reduced_offense_desc_offense_1.3, reduced_offense_desc_offense_1.4, reduced_offense_desc_offense_1.5)) ~ "Public Intoxication",
+     grepl((paste(driv, collapse="|")), paste(offense_desc_offense_1.0, offense_desc_offense_1.1, offense_desc_offense_1.2, offense_desc_offense_1.3, offense_desc_offense_1.4, offense_desc_offense_1.5, reduced_offense_desc_offense_1.0, reduced_offense_desc_offense_1.1, reduced_offense_desc_offense_1.2, reduced_offense_desc_offense_1.3, reduced_offense_desc_offense_1.4, reduced_offense_desc_offense_1.5)) ~ "DWI-related",
+    grepl((paste(assault, collapse="|")), paste(offense_desc_offense_1.0, offense_desc_offense_1.1, offense_desc_offense_1.2, offense_desc_offense_1.3, offense_desc_offense_1.4, offense_desc_offense_1.5)) | grepl((paste(driv, collapse="|")), paste(reduced_offense_desc_offense_1.0, reduced_offense_desc_offense_1.1, reduced_offense_desc_offense_1.2, reduced_offense_desc_offense_1.3, reduced_offense_desc_offense_1.4, reduced_offense_desc_offense_1.5))  ~ "Intoxication Assault",
+    grepl("POSS", paste(offense_desc_offense_1.0, offense_desc_offense_1.1, offense_desc_offense_1.2, offense_desc_offense_1.3, offense_desc_offense_1.4, offense_desc_offense_1.5, reduced_offense_desc_offense_1.0, reduced_offense_desc_offense_1.1, reduced_offense_desc_offense_1.2, reduced_offense_desc_offense_1.3, reduced_offense_desc_offense_1.4, reduced_offense_desc_offense_1.5)) & grepl("ALCOHOL", paste(offense_desc_offense_1.0, offense_desc_offense_1.1, offense_desc_offense_1.2, offense_desc_offense_1.3, offense_desc_offense_1.4, offense_desc_offense_1.5, reduced_offense_desc_offense_1.0, reduced_offense_desc_offense_1.1, reduced_offense_desc_offense_1.2, reduced_offense_desc_offense_1.3, reduced_offense_desc_offense_1.4, reduced_offense_desc_offense_1.5)) ~ " Possession of Alcohol in Car",
+  )) 
+#  group_by(first_charge_gen_includes_reduced) %>%
+ # tally()
+
+ALL_first_chage_reduce_with_halves
+```
+
+
+```{r}
+class_check_ALL <- ALL_first_chage_reduce_with_halves %>%
+  group_by(first_charge_gen_includes_reduced, offense_desc_offense_1.0, reduced_offense_desc_offense_1.0, offense_desc_offense_1.1, reduced_offense_desc_offense_1.1, offense_desc_offense_1.2, reduced_offense_desc_offense_1.2, offense_desc_offense_1.3, reduced_offense_desc_offense_1.3, offense_desc_offense_1.4, reduced_offense_desc_offense_1.4, offense_desc_offense_1.5, reduced_offense_desc_offense_1.5, offense_desc_offense_2.0, reduced_offense_desc_offense_2.0, offense_desc_offense_2.1, reduced_offense_desc_offense_2.1, offense_desc_offense_2.2, reduced_offense_desc_offense_2.2, offense_desc_offense_2.3, reduced_offense_desc_offense_2.3, offense_desc_offense_3.0, reduced_offense_desc_offense_3.0, offense_desc_offense_3.1, reduced_offense_desc_offense_3.1, offense_desc_offense_3.2, reduced_offense_desc_offense_3.2, offense_desc_offense_3.3, reduced_offense_desc_offense_3.3, offense_desc_offense_3.4, reduced_offense_desc_offense_3.4, offense_desc_offense_4.0, reduced_offense_desc_offense_4.0, offense_desc_offense_4.1, reduced_offense_desc_offense_4.1, offense_desc_offense_4.2, reduced_offense_desc_offense_4.2, offense_desc_offense_5.0, reduced_offense_desc_offense_5.0, offense_desc_offense_6.0, reduced_offense_desc_offense_6.0, offense_desc_offense_7.0, reduced_offense_desc_offense_7.0) %>%
+  tally()%>%
+  arrange(-n)
+
+class_check_ALL
+```
+
+```{r}
+count_charges_multiple_ALL <- ALL_first_chage_reduce_with_halves %>%
+  group_by(first_charge_gen_includes_reduced) %>%
+  tally() %>%
+  rename(total_people_with_this_as_first_charge = n) 
+
+count_charges_multiple_ALL
+```
+
+
+Okay -- how many people had their first charge as obstruction/dwi or whatnot
+
+```{r}
+ratio <- count_charges_multiple %>%
+  inner_join(count_charges_multiple_ALL, by = c("first_charge_gen_includes_reduced")) %>%
+  mutate(ratio = reoffended_ppl_based_off_og_reduced_first_charge/total_people_with_this_as_first_charge)
+
+ratio
+```
+```{r}
+16/sum(ratio$reoffended_ppl_based_off_og_reduced_first_charge)
+```
+
+
+
+
