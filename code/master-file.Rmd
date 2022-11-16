@@ -176,6 +176,8 @@ min(clean_dwi_pre$offense_date)
 
 ## Uploading the scraped csv files, case details
 
+NOTE: Here is where you would need to have files from scraping second round prep AND Ryan's scrape 
+
 Case details are information we pulled from each person's detailed case page. The ryan-scrape folder shows the code we used to scrape tables from specific URLs we generated
 
 ```{r}
