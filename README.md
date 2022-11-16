@@ -55,9 +55,6 @@ The answers lie in the following files:
 **Data point**: In 2021, drunken drivers caused nearly 2,000 crashes in San Antonio, killing 57 people and seriously injuring 107.<br>
 **Proof**: [graphs.Rmd](https://github.com/Houston-Chronicle/sa-obstruct/blob/main/code/graphs.Rmd) lines 234-239
 
-# Actual Data
-The data files we used for this project are not available to protect the privacy of the individuals in the dataset. Some data analysis is also restricted for that purpose. 
-
 # Files Explained (in order they should be run)
 
 **[scrape-recrods.ipynb](https://github.com/Houston-Chronicle/sa-obstruct/blob/main/code/scrape-recrods.ipynb)** <br>
