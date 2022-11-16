@@ -20,7 +20,7 @@ In the end, our analysis yielded the **following results**:
 * Some 69,000 people were charged with a DWI-related offense during the 13-year-period in question.
 * More than 19,000 of them — 28 percent — had their charges downgraded to obstructing a highway.
 * Of those with downgraded charges, one in four — nearly 5,000 people — were granted that break even though their blood alcohol concentrations were higher than .15, the threshold for extreme intoxication.
-* The Express-News analysis identified more than 3,500 people who received that extra benefit — meaning they were charged with obstruction and no mention of intoxication. They made up 18 percent of all DWI defendants whose charges were downgraded to obstructing a highway from 2009-2022. <br> 
+* The Express-News analysis identified more than 3,500 people who plead down from DWI to obstruction and also avoided any mention of "intoxication" in the charge language. They made up 18 percent of all DWI defendants whose charges were downgraded to obstructing a highway from 2009-2022. <br> 
 * More than 1,900 people whose DWI charges were downgraded were later arrested again for drunken driving.
 * By the end of 2021 — 14 months after DA Gonzales [clarified the DWI to obstruction of highway policy](https://www.expressnews.com/news/local/article/DWI-cases-San-Antonio-17577179.php?sid=5bbcfeda3f92a45e831e32f4&utm_source=newsletter&utm_medium=email&utm_content=news_a&utm_campaign=SAEN_TopStories#photo-23155916:~:text=Gonzales%20wrote%20that%20the%20reduced%20charge%20was%20appropriate%20when%3A) — DWI suspects in Bexar County had pleaded to obstructing a highway in 490 cases. In 169 of them — about 35 percent — the driver’s BAC was over .15.
 
@@ -44,7 +44,7 @@ The answers lie in the following files:
 **Data point**: More than 1,900 people whose DWI charges were downgraded were later arrested again for drunken driving.<br> 
 **Proof**: [previous-dwi-charges.Rmd](https://github.com/Houston-Chronicle/sa-obstruct/blob/main/code/previous-dwi-charges.Rmd), lines 284-289
 
-**Data point**: The Express-News analysis identified more than 3,500 people who received that extra benefit — meaning they were charged with obstruction and no mention of intoxication. They made up 18 percent of all DWI defendants whose charges were downgraded to obstructing a highway from 2009-2022. <br> 
+**Data point**: The Express-News analysis identified more than 3,500 people who plead down from DWI to obstruction and also avoided any mention of "intoxication" in the charge language. They made up 18 percent of all DWI defendants whose charges were downgraded to obstructing a highway from 2009-2022. <br> 
 **Proof**: [master-file.Rmd](https://github.com/Houston-Chronicle/sa-obstruct/blob/main/code/master-file.Rmd), lines 501-508
 
 **Data point**: By the end of 2021 — 14 months after DA Gonzales [clarified the DWI to obstruction of highway policy](https://www.expressnews.com/news/local/article/DWI-cases-San-Antonio-17577179.php?sid=5bbcfeda3f92a45e831e32f4&utm_source=newsletter&utm_medium=email&utm_content=news_a&utm_campaign=SAEN_TopStories#photo-23155916:~:text=Gonzales%20wrote%20that%20the%20reduced%20charge%20was%20appropriate%20when%3A) — DWI suspects in Bexar County had pleaded to obstructing a highway in 490 cases. In 169 of them — about 35 percent — the driver’s BAC was over .15. <br>
