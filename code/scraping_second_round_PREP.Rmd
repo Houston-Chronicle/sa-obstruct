@@ -1,0 +1,146 @@
+---
+title: "DWI: Scraping Prep"
+output: html_notebook
+---
+Steps for Scraping:
+
+https://search.bexar.org/Case/CaseDetail?st=s&s= (INSERT SID NUMBER) &cs=&ct=&=&full=y&p=1_ (INSERT CASE NUMBER) +++++++++ (INSERT COURT) (INSERT JUDICIAL NUMBER) 00000
+
+1. Distinguish passageway/roadway -- which ones are DWI related
+
+2. How many DWI-related obstruction charges are associated with BACs over 0.15
+
+3. Find obstruction charges that were reduced from intoxication assault
+a. This one we can probably just use the existing dataset, look at those who have two charges in the same day
+
+
+# Original
+
+```{r}
+library("RSelenium")
+library("rvest")
+library("tidyverse")
+library("httr")
+library("jsonlite")
+library("janitor")
+```
+
+
+```{r}
+info_needed <- clean_dwi_pre %>%
+  filter(grepl("BSTRUC", c(offense_description)) | grepl("BSTRUC", c(reduced_offense_desc))) %>%
+  select(full_name, birthdate, sex, race, offense_date, offense_description, reduced_offense_desc, "court", starts_with(c("case_cause", "sid", "judic"))) 
+
+info_needed
+```
+
+```{r}
+count <- info_needed %>%
+  group_by(sid) %>%
+  tally() %>%
+  arrange(desc(n))
+
+count
+```
+
+```{r}
+url_prep <- info_needed %>%
+  mutate(character_cnt = nchar(court)) %>%
+    mutate(url = case_when(
+    !is.na(case_cause_nbr) & character_cnt == 4 ~ paste("https://search.bexar.org/Case/CaseDetail?st=s&s=", sid, "&cs=&ct=&=&full=y&p=1_", case_cause_nbr, "+++++++++", court, judicial_nbr, "00000", sep = ""),
+    !is.na(case_cause_nbr) & character_cnt == 3 ~ paste("https://search.bexar.org/Case/CaseDetail?st=s&s=", sid, "&cs=&ct=&=&full=y&p=1_", case_cause_nbr, "+++++++++", court, "+", judicial_nbr, "00000", sep = ""),
+    TRUE ~ ""
+    )) %>%
+  filter(url != "")%>%
+  select(full_name, url, everything())
+
+url_prep
+```
+
+# Fixing Errors
+
+```{r}
+missing <- read_csv("Data/scraped/ryan/DWI Strays - Strays.csv") %>%
+  clean_names() %>%
+  select(full_name)
+
+missing
+```
+
+```{r}
+missing_and_needed_info <- missing %>%
+  inner_join(info_needed)
+
+missing_and_needed_info
+```
+
+Why is there an additional row -- it likely makes sense but let me check 
+
+```{r}
+missing_and_needed_info_check <- missing_and_needed_info %>%
+  group_by(full_name) %>%
+  tally() %>%
+  arrange(desc(n))
+
+missing_and_needed_info_check
+```
+
+
+```{r}
+miguel_check <- missing_and_needed_info %>%
+  filter(full_name == "Hernandez, Miguel")
+
+miguel_check
+```
+
+Okay this is why we check -- looks like the Miguel we care about had a passageway offense so we will filter out for the other Miguel
+
+```{r}
+clean_missing_and_needed_info <- missing_and_needed_info %>%
+  filter(birthdate != as.Date("1985-07-29")) %>%
+  arrange(full_name)
+
+clean_missing_and_needed_info
+```
+
+
+```{r}
+write_csv(clean_missing_and_needed_info, "Data/my_exports/May13/fix_missing_urls.csv")
+```
+
+
+## timed out: copy paste discovery and fix
+
+###### Okay let me check the event descriptions here
+
+```{r}
+count_all_highway_intox_anti_prep <- count_all_highway_intox %>%
+  select(-n)
+
+people_in_here_highway_intox_anti_prep <- people_in_here_highway_intox %>%
+  select(-n)
+
+highway_anti <- count_all_highway_intox_anti_prep %>%
+  anti_join(people_in_here_highway_intox_anti_prep)  %>%
+  inner_join(clean_scraped_prep) %>%
+  #filter(is.na(reduced_offense_desc))
+  group_by(offense_description, reduced_offense_desc) %>%
+  tally() 
+  #arrange(desc(n)) 
+
+highway_anti
+```
+
+### Potentially more missing people
+
+```{r}
+clean_scraped_prep_missing <- clean_scraped_prep %>%
+  filter(eventDescription == "Timeout error")
+
+clean_scraped_prep_missing
+```
+
+```{r}
+write_csv(clean_scraped_prep_missing, "code/Data/for_ryan_still_missing.csv")
+```
+

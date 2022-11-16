@@ -5,6 +5,12 @@
 # Session Data files
 .RData
 
+
+### Project Specific ##
+data/
+code/Data/*
+example-stories/
+
 # User-specific files
 .Ruserdata
 
