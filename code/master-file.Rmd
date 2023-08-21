@@ -164,7 +164,7 @@ clean_dwi_offense_group_no_reduce <- clean_dwi_pre %>%
 clean_dwi_offense_group_no_reduce
 ```
 
-Brian always asks for the maximum date in our dataset so I need to remember that this is it:
+Quick reminder of the maximum and minimum dates in this dataset: 
 
 ```{r}
 max(clean_dwi_pre$offense_date)
@@ -404,7 +404,7 @@ clean_dwi <- clean_dwi_pre %>%
 clean_dwi
 ```
 
-Don't mind me, obsessively checking the offense desc and the reduced offense desc
+Can't be too careful. Let's double check. 
 
 ```{r}
 check_charges <- clean_dwi %>%
@@ -468,7 +468,7 @@ passageway <- clean_scraped %>%
 passageway
 ```
 
-Quick docket check for Allie
+Exporting the docket information for my editor
 
 ```{r}
 #write_csv(passageway, "Data/my_exports/allie_check_passageway.csv")
@@ -481,7 +481,6 @@ passageway_check_docket <- passageway %>%
 
 passageway_check_docket
 ```
-
 
 Let me double check I'm looking at the charges I want to look at.
 
@@ -553,7 +552,7 @@ case_pass_BAC
 
 There are 1,385 cases with a BAC of 0.15 or higher.
 
-But you are probably wondering -- well how many people had this passageway roadway charge?
+But how many people had this passageway roadway charge?
 
 Let's look at the dataset before we filtered for DWI people
 
